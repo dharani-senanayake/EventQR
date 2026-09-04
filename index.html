@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entry Pass Scanner</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body>
+
+  <h1>Entry Pass Scanner</h1>
+  <p class="sub">Point the camera at the guest's QR code</p>
+
+  <div id="reader"></div>
+
+  <div class="card" id="resultCard">
+    <h2>Scanned Details</h2>
+
+    <div class="field">
+      <label>Raw QR Data</label>
+      <div class="raw-box" id="rawData"></div>
+    </div>
+
+    <div class="field">
+      <label>Table / Reference</label>
+      <input type="text" id="tableField" placeholder="e.g. Table_10">
+    </div>
+
+    <div class="field">
+      <label>Guest Name</label>
+      <input type="text" id="nameField" placeholder="Optional">
+    </div>
+
+    <div class="field">
+      <label>Notes</label>
+      <textarea id="notesField" rows="2" placeholder="Optional"></textarea>
+    </div>
+
+    <button id="submitBtn">Submit to Sheet</button>
+    <button id="rescanBtn">Scan Another</button>
+
+    <div id="status"></div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
