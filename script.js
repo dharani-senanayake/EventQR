@@ -1,6 +1,6 @@
 // ⚠️ Paste your Apps Script Web App /exec URL here after deploying Code.gs
 const APPS_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbz3UT-3OrvI-2BA7odvcoXM-xjiwOU0lFGJ2k-XmJFZyR4Vt5bjmDgVx6_O8b5f4Ojtzg/exec";
+  "https://script.google.com/macros/s/AKfycby54KzAnJ3_RyPtRMiYlevs5wCspXtN1dYNVYAizNXAx0uvrABC8M17bZmARQH7DTORnw/exec";
 
 let lastScanned = null;
 let scanning = true;
