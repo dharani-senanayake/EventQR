@@ -1,6 +1,6 @@
 // ⚠️ Paste your Apps Script Web App /exec URL here after deploying Code.gs
 const APPS_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbxOT59U5KRdv7XN114ZUpQtDZzdfO-tczoqHiPDLnvnmFUpCEEnTVWczq-RWpK7OjD2Bw/exec";
+  "https://script.google.com/macros/s/AKfycbwRd1RrUvgMX_hcnMuP98KeRn1R0nEIVXWsLMJD2J-Dh2nAqS-W6dgP5iElC77-7njnfQ/exec";
 
 let lastScanned = null;
 let scanning = true;
@@ -9,6 +9,8 @@ const resultCard = document.getElementById("resultCard");
 const rawDataEl = document.getElementById("rawData");
 const tableField = document.getElementById("tableField");
 const nameField = document.getElementById("nameField");
+const participantsField = document.getElementById("participantsField");
+const codeField = document.getElementById("codeField");
 const notesField = document.getElementById("notesField");
 const submitBtn = document.getElementById("submitBtn");
 const rescanBtn = document.getElementById("rescanBtn");
@@ -38,15 +40,24 @@ function onScanSuccess(decodedText) {
 
   rawDataEl.textContent = decodedText;
 
-  // Try to auto-fill fields if the QR contains JSON like {"table":"...","name":"..."}
-  try {
-    const parsed = JSON.parse(decodedText);
-    if (parsed.table) tableField.value = parsed.table;
-    if (parsed.name) nameField.value = parsed.name;
-  } catch (e) {
-    const m = decodedText.match(/table[_\s]*\d+/i);
-    if (m) tableField.value = m[0];
-  }
+  // Parse the entry pass text format:
+  //   Name: Frank Perera
+  //   Table No: 10
+  //   Number of participants: 1
+  //   Code: CPBM1333_P1_T10
+  const nameMatch = decodedText.match(/Name:\s*(.+)/i);
+  const tableMatch = decodedText.match(/Table No:\s*(.+)/i);
+  const participantsMatch = decodedText.match(
+    /Number of participants:\s*(.+)/i,
+  );
+  const codeMatch = decodedText.match(/Code:\s*(\S+)/i);
+
+  nameField.value = nameMatch ? nameMatch[1].trim() : "";
+  tableField.value = tableMatch ? tableMatch[1].trim() : "";
+  participantsField.value = participantsMatch
+    ? participantsMatch[1].trim()
+    : "";
+  codeField.value = codeMatch ? codeMatch[1].trim() : "";
 
   resultCard.classList.add("visible");
   submitBtn.disabled = false;
@@ -66,8 +77,10 @@ submitBtn.addEventListener("click", () => {
 
   const payload = {
     rawData: lastScanned,
-    table: tableField.value,
     name: nameField.value,
+    table: tableField.value,
+    participants: participantsField.value,
+    code: codeField.value,
     notes: notesField.value,
   };
 
@@ -100,8 +113,10 @@ submitBtn.addEventListener("click", () => {
 
 rescanBtn.addEventListener("click", () => {
   resultCard.classList.remove("visible");
-  tableField.value = "";
   nameField.value = "";
+  tableField.value = "";
+  participantsField.value = "";
+  codeField.value = "";
   notesField.value = "";
   statusEl.textContent = "";
   submitBtn.disabled = false;
