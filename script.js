@@ -1,6 +1,6 @@
 // ⚠️ Paste your Apps Script Web App /exec URL here after deploying Code.gs
 const APPS_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbwRd1RrUvgMX_hcnMuP98KeRn1R0nEIVXWsLMJD2J-Dh2nAqS-W6dgP5iElC77-7njnfQ/exec";
+  "https://script.google.com/macros/s/AKfycbwHbnbuyzmsO0zlw7VVSf7XkKOEt7nzJ231ZjY8ofeIPgng_5LJFnlb7YX4PptKCWns8w/exec";
 
 let lastScanned = null;
 let scanning = true;
@@ -95,9 +95,6 @@ submitBtn.addEventListener("click", () => {
       if (res.status === "success") {
         statusEl.textContent = "✓ " + res.message;
         statusEl.className = "ok";
-      } else if (res.status === "duplicate") {
-        statusEl.textContent = "⚠ " + res.message;
-        statusEl.className = "warn";
       } else {
         statusEl.textContent = "✗ " + res.message;
         statusEl.className = "err";
