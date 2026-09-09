@@ -19,7 +19,6 @@ const statusEl = document.getElementById("status");
 const torchBtn = document.getElementById("torchBtn");
 const zoomSlider = document.getElementById("zoomSlider");
 const zoomWrap = document.getElementById("zoomWrap");
-const fileInput = document.getElementById("fileInput");
 
 // Use the fastest/most accurate detector available, and only decode QR codes
 // (skipping barcode formats speeds up each frame scan).
@@ -42,13 +41,14 @@ function startScanner() {
     facingMode: "environment",
     width: { min: 640, ideal: 1920, max: 1920 },
     height: { min: 480, ideal: 1080, max: 1080 },
+    advanced: [{ focusMode: "continuous" }],
   };
 
   const config = {
     fps: 15,
     qrbox: (viewfinderWidth, viewfinderHeight) => {
       const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-      const size = Math.floor(minEdge * 0.85);
+      const size = Math.floor(minEdge * 0.7);
       return { width: size, height: size };
     },
     aspectRatio: 1.0,
@@ -78,6 +78,15 @@ function setupCameraControls() {
     return;
   }
 
+  // Ask for continuous autofocus explicitly too — some Android browsers only
+  // honor this if it's applied after the stream is already running, not just
+  // in the initial getUserMedia constraints.
+  if (trackCapabilities && trackCapabilities.focusMode) {
+    html5QrCode
+      .applyVideoConstraints({ advanced: [{ focusMode: "continuous" }] })
+      .catch(() => {});
+  }
+
   if (trackCapabilities && trackCapabilities.torch) {
     torchBtn.style.display = "inline-block";
     torchBtn.dataset.on = "false";
@@ -90,7 +99,14 @@ function setupCameraControls() {
     zoomSlider.min = min;
     zoomSlider.max = max;
     zoomSlider.step = step || 0.1;
-    zoomSlider.value = min;
+    // Start slightly zoomed in from the minimum — most small QR codes at a
+    // guest's normal holding distance decode better with a little zoom
+    // applied by default, without anyone having to touch the slider.
+    const defaultZoom = Math.min(max, min + (max - min) * 0.25);
+    zoomSlider.value = defaultZoom;
+    html5QrCode
+      .applyVideoConstraints({ advanced: [{ zoom: defaultZoom }] })
+      .catch(() => {});
     zoomWrap.style.display = "flex";
   } else {
     zoomWrap.style.display = "none";
@@ -124,34 +140,6 @@ if (zoomSlider) {
   });
 }
 
-// Fallback for codes the live camera just can't grab (too small, too far,
-// glare on the invite paper): let the guest snap or pick a photo instead.
-if (fileInput) {
-  fileInput.addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    statusEl.textContent = "Reading image...";
-    statusEl.className = "warn";
-
-    const scanPromise = scanning
-      ? html5QrCode.scanFile(file, true)
-      : html5QrCode.pause(true) && html5QrCode.scanFile(file, true);
-
-    scanPromise
-      .then((decodedText) => {
-        scanning = false;
-        onScanSuccess(decodedText);
-      })
-      .catch((err) => {
-        statusEl.textContent = "Couldn't read a QR code in that image.";
-        statusEl.className = "err";
-      })
-      .finally(() => {
-        fileInput.value = "";
-      });
-  });
-}
 
 function onScanSuccess(decodedText) {
   if (!scanning) return;
