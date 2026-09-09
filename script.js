@@ -4,7 +4,6 @@ const APPS_SCRIPT_URL =
 
 let lastScanned = null;
 let scanning = true;
-let trackCapabilities = null;
 
 const resultCard = document.getElementById("resultCard");
 const rawDataEl = document.getElementById("rawData");
@@ -16,130 +15,22 @@ const notesField = document.getElementById("notesField");
 const submitBtn = document.getElementById("submitBtn");
 const rescanBtn = document.getElementById("rescanBtn");
 const statusEl = document.getElementById("status");
-const torchBtn = document.getElementById("torchBtn");
-const zoomSlider = document.getElementById("zoomSlider");
-const zoomWrap = document.getElementById("zoomWrap");
 
-// Use the fastest/most accurate detector available, and only decode QR codes
-// (skipping barcode formats speeds up each frame scan).
-const html5QrCode = new Html5Qrcode("reader", {
-  formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-  useBarCodeDetectorIfSupported: true,
-  verbose: false,
-});
+const html5QrCode = new Html5Qrcode("reader");
 
-// Small, high-contrast QR codes printed on a dark background (like this
-// invite) are hard to grab at a distance. Two changes fix most of that:
-//  1. Ask the camera for a higher resolution feed so the QR has more pixels
-//     to work with once it's decoded.
-//  2. Make the scan box big (85% of the preview) instead of a fixed 250px,
-//     so the guest doesn't have to line the small code up perfectly.
 function startScanner() {
   scanning = true;
-
-  const cameraConfig = {
-    facingMode: "environment",
-    width: { min: 640, ideal: 1920, max: 1920 },
-    height: { min: 480, ideal: 1080, max: 1080 },
-    advanced: [{ focusMode: "continuous" }],
-  };
-
-  const config = {
-    fps: 15,
-    qrbox: (viewfinderWidth, viewfinderHeight) => {
-      const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-      const size = Math.floor(minEdge * 0.7);
-      return { width: size, height: size };
-    },
-    aspectRatio: 1.0,
-    disableFlip: false,
-  };
-
   html5QrCode
-    .start(cameraConfig, config, onScanSuccess, onScanFailure)
-    .then(() => setupCameraControls())
+    .start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      onScanSuccess,
+    )
     .catch((err) => {
       statusEl.textContent = "Camera error: " + err;
       statusEl.className = "err";
     });
 }
-
-// Silently ignore per-frame "no QR found" errors — only real start() errors
-// should be surfaced to the user.
-function onScanFailure() {}
-
-// Torch (flash) and zoom aren't supported on every device/browser, so only
-// show the controls when the active camera actually reports them.
-function setupCameraControls() {
-  try {
-    trackCapabilities = html5QrCode.getRunningTrackCapabilities();
-  } catch (e) {
-    trackCapabilities = null;
-    return;
-  }
-
-  // Ask for continuous autofocus explicitly too — some Android browsers only
-  // honor this if it's applied after the stream is already running, not just
-  // in the initial getUserMedia constraints.
-  if (trackCapabilities && trackCapabilities.focusMode) {
-    html5QrCode
-      .applyVideoConstraints({ advanced: [{ focusMode: "continuous" }] })
-      .catch(() => {});
-  }
-
-  if (trackCapabilities && trackCapabilities.torch) {
-    torchBtn.style.display = "inline-block";
-    torchBtn.dataset.on = "false";
-  } else {
-    torchBtn.style.display = "none";
-  }
-
-  if (trackCapabilities && trackCapabilities.zoom) {
-    const { min, max, step } = trackCapabilities.zoom;
-    zoomSlider.min = min;
-    zoomSlider.max = max;
-    zoomSlider.step = step || 0.1;
-    // Start slightly zoomed in from the minimum — most small QR codes at a
-    // guest's normal holding distance decode better with a little zoom
-    // applied by default, without anyone having to touch the slider.
-    const defaultZoom = Math.min(max, min + (max - min) * 0.25);
-    zoomSlider.value = defaultZoom;
-    html5QrCode
-      .applyVideoConstraints({ advanced: [{ zoom: defaultZoom }] })
-      .catch(() => {});
-    zoomWrap.style.display = "flex";
-  } else {
-    zoomWrap.style.display = "none";
-  }
-}
-
-if (torchBtn) {
-  torchBtn.addEventListener("click", () => {
-    const isOn = torchBtn.dataset.on === "true";
-    html5QrCode
-      .applyVideoConstraints({ advanced: [{ torch: !isOn }] })
-      .then(() => {
-        torchBtn.dataset.on = (!isOn).toString();
-        torchBtn.textContent = !isOn ? "🔦 Torch On" : "🔦 Torch";
-      })
-      .catch(() => {
-        statusEl.textContent = "Torch not supported on this device.";
-        statusEl.className = "warn";
-      });
-  });
-}
-
-if (zoomSlider) {
-  zoomSlider.addEventListener("input", (e) => {
-    const zoomValue = parseFloat(e.target.value);
-    html5QrCode
-      .applyVideoConstraints({ advanced: [{ zoom: zoomValue }] })
-      .catch(() => {
-        /* zoom not supported mid-stream on some browsers, ignore */
-      });
-  });
-}
-
 
 function onScanSuccess(decodedText) {
   if (!scanning) return;
@@ -229,6 +120,5 @@ rescanBtn.addEventListener("click", () => {
   html5QrCode.resume();
   scanning = true;
 });
-
 
 startScanner();
