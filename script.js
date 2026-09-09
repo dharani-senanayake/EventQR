@@ -4,6 +4,7 @@ const APPS_SCRIPT_URL =
 
 let lastScanned = null;
 let scanning = true;
+let trackCapabilities = null;
 
 const resultCard = document.getElementById("resultCard");
 const rawDataEl = document.getElementById("rawData");
@@ -15,21 +16,178 @@ const notesField = document.getElementById("notesField");
 const submitBtn = document.getElementById("submitBtn");
 const rescanBtn = document.getElementById("rescanBtn");
 const statusEl = document.getElementById("status");
+const cameraStatusEl = document.getElementById("cameraStatus");
+const torchBtn = document.getElementById("torchBtn");
+const zoomSlider = document.getElementById("zoomSlider");
+const zoomWrap = document.getElementById("zoomWrap");
 
-const html5QrCode = new Html5Qrcode("reader");
+// Use the fastest/most accurate detector available, and only decode QR codes
+// (skipping barcode formats speeds up each frame scan).
+const html5QrCode = new Html5Qrcode("reader", {
+  formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+  useBarCodeDetectorIfSupported: true,
+  verbose: false,
+});
 
+// Small, high-contrast QR codes printed on a dark background (like this
+// invite) are hard to grab at a distance. Two changes fix most of that:
+//  1. Ask the camera for a higher resolution feed so the QR has more pixels
+//     to work with once it's decoded.
+//  2. Make the scan box big (85% of the preview) instead of a fixed 250px,
+//     so the guest doesn't have to line the small code up perfectly.
 function startScanner() {
   scanning = true;
+  cameraStatusEl.textContent = "Starting camera…";
+  cameraStatusEl.style.color = "#8a6d00";
+
+  // If start() neither resolves nor rejects within a few seconds, the
+  // browser is almost always silently stuck waiting on a permission prompt
+  // (sometimes hidden/blocked) or an OS-level camera privacy toggle — it's
+  // not something retrying in JS can fix, so tell the user what to check.
+  let settled = false;
+  const watchdog = setTimeout(() => {
+    if (!settled) {
+      cameraStatusEl.style.color = "#b00020";
+      cameraStatusEl.textContent =
+        "Still waiting on the camera. Check: (1) a permission popup near the address bar you may have missed, (2) your OS's camera privacy setting (Windows Settings > Privacy > Camera, or macOS System Settings > Privacy & Security > Camera) allows this browser, (3) no other app/tab is using the camera. Open DevTools (F12) > Console for the exact error.";
+    }
+  }, 6000);
+
+  const cameraConfig = { facingMode: "environment" };
+
+  const config = {
+    fps: 15,
+    qrbox: (viewfinderWidth, viewfinderHeight) => {
+      const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+      const size = Math.floor(minEdge * 0.7);
+      return { width: size, height: size };
+    },
+    aspectRatio: 1.0,
+    disableFlip: false,
+    // Extra resolution/facing constraints belong here, not merged into
+    // cameraConfig above — html5-qrcode requires cameraIdOrConfig to have
+    // exactly one key.
+    videoConstraints: {
+      facingMode: "environment",
+      width: { min: 640, ideal: 1920, max: 1920 },
+      height: { min: 480, ideal: 1080, max: 1080 },
+    },
+  };
+
   html5QrCode
-    .start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 250, height: 250 } },
-      onScanSuccess,
-    )
+    .start(cameraConfig, config, onScanSuccess, onScanFailure)
+    .then(() => {
+      settled = true;
+      clearTimeout(watchdog);
+      cameraStatusEl.textContent = "";
+      setupCameraControls();
+    })
     .catch((err) => {
-      statusEl.textContent = "Camera error: " + err;
-      statusEl.className = "err";
+      console.error("Camera start failed with videoConstraints:", err);
+      // Some cameras/browsers reject the min/ideal resolution constraints
+      // outright (OverconstrainedError). Fall back to a plain request so the
+      // camera at least comes on, rather than showing nothing.
+      const plainConfig = {
+        fps: 15,
+        qrbox: config.qrbox,
+        aspectRatio: 1.0,
+        disableFlip: false,
+      };
+      html5QrCode
+        .start(cameraConfig, plainConfig, onScanSuccess, onScanFailure)
+        .then(() => {
+          settled = true;
+          clearTimeout(watchdog);
+          cameraStatusEl.textContent = "";
+          setupCameraControls();
+        })
+        .catch((err2) => {
+          settled = true;
+          clearTimeout(watchdog);
+          console.error("Camera start failed with plain facingMode:", err2);
+          cameraStatusEl.style.color = "#b00020";
+          cameraStatusEl.textContent =
+            "Camera error: " +
+            (err2 && err2.message ? err2.message : err2) +
+            " — check the camera permission icon in the address bar, and that no other app/tab is using the camera.";
+        });
     });
+}
+
+// Silently ignore per-frame "no QR found" errors — only real start() errors
+// should be surfaced to the user.
+function onScanFailure() {}
+
+// Torch (flash) and zoom aren't supported on every device/browser, so only
+// show the controls when the active camera actually reports them.
+function setupCameraControls() {
+  try {
+    trackCapabilities = html5QrCode.getRunningTrackCapabilities();
+  } catch (e) {
+    trackCapabilities = null;
+    return;
+  }
+
+  // Ask for continuous autofocus explicitly too — some Android browsers only
+  // honor this if it's applied after the stream is already running, not just
+  // in the initial getUserMedia constraints.
+  if (trackCapabilities && trackCapabilities.focusMode) {
+    html5QrCode
+      .applyVideoConstraints({ advanced: [{ focusMode: "continuous" }] })
+      .catch(() => {});
+  }
+
+  if (trackCapabilities && trackCapabilities.torch) {
+    torchBtn.style.display = "inline-block";
+    torchBtn.dataset.on = "false";
+  } else {
+    torchBtn.style.display = "none";
+  }
+
+  if (trackCapabilities && trackCapabilities.zoom) {
+    const { min, max, step } = trackCapabilities.zoom;
+    zoomSlider.min = min;
+    zoomSlider.max = max;
+    zoomSlider.step = step || 0.1;
+    // Start slightly zoomed in from the minimum — most small QR codes at a
+    // guest's normal holding distance decode better with a little zoom
+    // applied by default, without anyone having to touch the slider.
+    const defaultZoom = Math.min(max, min + (max - min) * 0.25);
+    zoomSlider.value = defaultZoom;
+    html5QrCode
+      .applyVideoConstraints({ advanced: [{ zoom: defaultZoom }] })
+      .catch(() => {});
+    zoomWrap.style.display = "flex";
+  } else {
+    zoomWrap.style.display = "none";
+  }
+}
+
+if (torchBtn) {
+  torchBtn.addEventListener("click", () => {
+    const isOn = torchBtn.dataset.on === "true";
+    html5QrCode
+      .applyVideoConstraints({ advanced: [{ torch: !isOn }] })
+      .then(() => {
+        torchBtn.dataset.on = (!isOn).toString();
+        torchBtn.textContent = !isOn ? "🔦 Torch On" : "🔦 Torch";
+      })
+      .catch(() => {
+        statusEl.textContent = "Torch not supported on this device.";
+        statusEl.className = "warn";
+      });
+  });
+}
+
+if (zoomSlider) {
+  zoomSlider.addEventListener("input", (e) => {
+    const zoomValue = parseFloat(e.target.value);
+    html5QrCode
+      .applyVideoConstraints({ advanced: [{ zoom: zoomValue }] })
+      .catch(() => {
+        /* zoom not supported mid-stream on some browsers, ignore */
+      });
+  });
 }
 
 function onScanSuccess(decodedText) {
